@@ -3,6 +3,14 @@
     "qotdnet": {
       "commandName": "Project",
       "commandLineArgs": "--protocol udp"
+    },
+    "qotdnet-linux-udp": {
+      "commandName": "Project",
+      "commandLineArgs": "--protocol udp --port 55406"
+    },
+    "qotdnet-linux-tcp": {
+      "commandName": "Project",
+      "commandLineArgs": "--protocol tcp --port 55406"
     }
   }
 }
