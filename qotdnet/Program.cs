@@ -18,7 +18,7 @@ namespace qotdnet
             [Option("port", Default = 17, HelpText = "TCP/UDP port to service listens on")]
             public int Port { get; set; }
 
-            [Option('i', "in", Default = ".\\quotes.json", HelpText = "Quotes file path")]
+            [Option('i', "in", Default = "quotes.json", HelpText = "Quotes file path")]
             public string QuotesFilePath { get; set; }
         }
 
@@ -58,6 +58,13 @@ namespace qotdnet
                     }
 
                     filePath = options.QuotesFilePath;
+                    
+                    // Check if path or just file name
+                    if (!filePath.Contains(Path.DirectorySeparatorChar))
+                    {
+                        // let's assume it's just a file name, so expect it to be in pwd
+                        filePath = "." + Path.DirectorySeparatorChar + filePath;
+                    }
 
                     // find file
                     if (!File.Exists(filePath))
