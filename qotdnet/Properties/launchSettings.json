@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "qotdnet": {
+      "commandName": "Project",
+      "commandLineArgs": "--protocol udp"
+    }
+  }
+}
