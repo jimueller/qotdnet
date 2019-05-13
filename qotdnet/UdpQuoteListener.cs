@@ -7,10 +7,10 @@ using System.Text;
 
 namespace qotdnet
 {
-    class UdpQuoteListener : IQuoteService
+    sealed class UdpQuoteListener : IQuoteService
     {
-        private IQuoteSource quoteSource;
-        private UdpClient server;
+        private IQuoteSource _quoteSource;
+        private UdpClient _server;
 
         public UdpQuoteListener()
         {
@@ -22,19 +22,19 @@ namespace qotdnet
 
         public void Listen(int port, IQuoteSource quoteSource)
         {
-            this.quoteSource = quoteSource;
-            server = new UdpClient(port);
+            _quoteSource = quoteSource;
+            _server = new UdpClient(port);
            
             while (true)
             {
                 var remoteEP = new IPEndPoint(IPAddress.Any, port);
-                server.Receive(ref remoteEP);
+                _server.Receive(ref remoteEP);
 
                 Log.Information("Request from {RemoteEndPoint}", remoteEP);
 
                 Quote quote = quoteSource.GetQuote();
-                byte[] quoteBytes = Encoding.ASCII.GetBytes(quote.ToString() + "\n");
-                server.Send(quoteBytes,quoteBytes.Length, remoteEP);
+                byte[] quoteBytes = Encoding.ASCII.GetBytes(quote + "\n");
+                _server.Send(quoteBytes,quoteBytes.Length, remoteEP);
 
                 Log.Information("Sent quote {Quote} to {RemoteEndPoint}", quote, remoteEP);
             }
@@ -44,7 +44,7 @@ namespace qotdnet
         #region IDisposable Support
         private bool disposedValue = false; // To detect redundant calls
 
-        protected virtual void Dispose(bool disposing)
+        private void Dispose(bool disposing)
         {
             if (!disposedValue)
             {
@@ -55,8 +55,8 @@ namespace qotdnet
 
                 // TODO: free unmanaged resources (unmanaged objects) and override a finalizer below.
                 // TODO: set large fields to null.
-                server.Dispose();
-                server = null;
+                _server.Dispose();
+                _server = null;
 
                 disposedValue = true;
             }

@@ -9,8 +9,7 @@ namespace qotdnet
 {
     class Program
     {
-
-        public class Options
+        private class Options
         {
             [Option("protocol", Default = "tcp", HelpText = "'tcp' or 'udp'")]
             public string Protocol { get; set; }
@@ -76,7 +75,7 @@ namespace qotdnet
             catch (Exception ex)
             {
                 Log.Error(ex.Message);
-                System.Environment.Exit(1);
+                Environment.Exit(1);
             }
 
             Log.Information("Protocol: {ProtocolType}", prot);
