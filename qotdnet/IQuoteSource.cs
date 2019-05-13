@@ -4,7 +4,7 @@ using System.Text;
 
 namespace qotdnet
 {
-    interface IQuoteSource
+    internal interface IQuoteSource
     {
         Quote GetQuote();
         List<Quote> DumpQuotes();

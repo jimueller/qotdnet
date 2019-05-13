@@ -7,7 +7,7 @@ using System.Text;
 
 namespace qotdnet
 {
-    class JsonFileQuoteSource : IQuoteSource
+    internal class JsonFileQuoteSource : IQuoteSource
     {
         List<Quote> quotes = new List<Quote>();
         private static Random rnd = new Random();

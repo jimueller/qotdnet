@@ -4,7 +4,7 @@ using System.Text;
 
 namespace qotdnet
 {
-    interface IQuoteService : IDisposable
+    internal interface IQuoteService : IDisposable
     {
 
         void Listen(int port, IQuoteSource quoteSource);
