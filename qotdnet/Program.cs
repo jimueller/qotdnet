@@ -2,26 +2,64 @@
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
+using System.Net;
 using System.Net.Sockets;
 
 namespace qotdnet
 {
     class Program
     {
+        private List<ProtocolType> AllowedProtocols = new List<ProtocolType>()
+        {
+            ProtocolType.Tcp,
+            ProtocolType.Udp
+        };
+
+        private const int DefaultPort = 17;
+        private const ProtocolType DefaultProtocol = ProtocolType.Tcp;
+        private const string DefaultQuotesFilePath = "quotes.json";
+
+
+        private ProtocolType _protocol = ProtocolType.Unspecified;
+        private int _port = 0;
+        private string _quotesFilePath;
+
+
         private class Options
         {
-            [Option("protocol", Default = "tcp", HelpText = "'tcp' or 'udp'")]
+            [Option("protocol", HelpText = "'tcp' or 'udp'")]
             public string Protocol { get; set; }
 
-            [Option("port", Default = 17, HelpText = "TCP/UDP port to service listens on")]
+            [Option("port", Default = -1, HelpText = "TCP/UDP port to service listens on")]
             public int Port { get; set; }
 
-            [Option('i', "in", Default = "quotes.json", HelpText = "Quotes file path")]
+            [Option('i', "in", HelpText = "Quotes file path")]
             public string QuotesFilePath { get; set; }
         }
 
         static void Main(string[] args)
+        {
+            Program program = new Program();
+
+            try
+            {
+                program.Run(args);
+                Environment.ExitCode = 0;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Error: {Exception}", ex);
+                Environment.ExitCode = 1;
+            }
+            finally
+            {
+                Environment.Exit(Environment.ExitCode);
+            }
+        }
+
+        void Run(string[] args)
         {
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Information()
@@ -30,71 +68,157 @@ namespace qotdnet
 
             Log.Information("Starting qotdnet...");
 
-            ProtocolType prot = ProtocolType.Tcp;
-            int port = 0;
-            string filePath = "";
+            Initialize(args);
 
-            //parse options
-            try
+            Log.Information("Protocol: {ProtocolType}", _protocol);
+            Log.Information("Port: {int}", _port);
+            Log.Information("Quotes file : {string}", _quotesFilePath);
+
+            IQuoteSource qs = new JsonFileQuoteSource(new FileInfo(_quotesFilePath));
+            IQuoteService quoteService;
+
+            if (ProtocolType.Tcp == _protocol)
             {
-                var result = Parser.Default.ParseArguments<Options>(args)
-                .WithParsed(options =>
-                {
-                    port = options.Port;
+                quoteService = new TcpQuoteListener();
+                quoteService.Listen(_port, qs);
+            }
+            else
+            {
+                quoteService = new UdpQuoteListener();
+                quoteService.Listen(_port, qs);
+            }
+        }
 
-                    if (string.Equals("tcp", options.Protocol, StringComparison.OrdinalIgnoreCase) ||
-                        string.IsNullOrWhiteSpace(options.Protocol))
+        private void Initialize(string[] args)
+        {
+            Log.Information("Initializing configuration...");
+
+            Parser.Default.ParseArguments<Options>(args)
+            .WithParsed(options =>
+            {
+                InitPort(options.Port);
+                InitProtocolType(options.Protocol);
+                InitFilePath(options.QuotesFilePath);
+            });     
+        }
+
+        private void InitFilePath(string quotesFilePath)
+        {
+            string filePath = quotesFilePath;
+
+            if (String.IsNullOrEmpty(filePath))
+            {
+                filePath = Environment.GetEnvironmentVariable("QOTD_FILE_PATH");
+            }
+
+            if (String.IsNullOrEmpty(filePath))
+            {
+                filePath = DefaultQuotesFilePath;
+            }
+
+            // Check if path or just file name
+            if (!filePath.Contains(Path.DirectorySeparatorChar))
+            {
+                // let's assume it's just a file name, so expect it to be in pwd
+                filePath = "." + Path.DirectorySeparatorChar + filePath;
+            }
+
+            // find file
+            if (!File.Exists(filePath))
+            {
+                throw new ArgumentException("Quotes file, " + filePath + " not found.");
+            }
+            else
+            {
+                _quotesFilePath = filePath;
+            }
+        }
+
+        private void InitProtocolType(string optionsProtocol)
+        {
+            string proto = null;
+            ProtocolType protocolType = ProtocolType.Unspecified;
+
+            if (String.IsNullOrEmpty(optionsProtocol))
+            {
+                Log.Information("Protocol arg not specified, checking QOTD_PROTO_TYPE env var...");
+                string protoEnv = Environment.GetEnvironmentVariable("QOTD_PROTO_TYPE");
+
+                if (!String.IsNullOrEmpty(protoEnv))
+                {
+                    Log.Information("Found QOTD_PROTO_TYPE: {string}.", protoEnv);
+                    proto = protoEnv;
+                }
+            } else
+            {
+                proto = optionsProtocol;
+            }
+
+            if (!String.IsNullOrEmpty(proto))
+            {
+                if(Enum.TryParse(proto, true, out protocolType))
+                {
+                    if (!AllowedProtocols.Contains(protocolType))
                     {
-                        prot = ProtocolType.Tcp;
+                        throw new ArgumentException($"Specified protocol {proto} not allowed, must be TCP or UDP");
                     }
-                    else if (string.Equals("udp", options.Protocol, StringComparison.OrdinalIgnoreCase))
+                }
+                else
+                {
+                    throw new ArgumentException($"Unknown protocol {proto} specified, must be TCP or UDP");
+                }
+            }
+
+            if(ProtocolType.Unspecified == protocolType)
+            {
+                Log.Information("Using default protocol {ProtocolType}", DefaultProtocol);
+                protocolType = DefaultProtocol;
+            }
+
+            _protocol = protocolType;
+        }
+
+        private void InitPort(int optionsPort)
+        {
+            int port = -1;
+            bool provided = false;
+
+            if (optionsPort == -1)
+            {
+                Log.Information("Port from args not provided, reading QOTD_PORT env var...");
+                string qotdEnvVar = Environment.GetEnvironmentVariable("QOTD_PORT");
+
+                if (!String.IsNullOrEmpty(qotdEnvVar))
+                {
+                    if (!int.TryParse(Environment.GetEnvironmentVariable("QOTD_PORT"), out port))
                     {
-                        prot = ProtocolType.Udp;
+                        throw new ArithmeticException("Unable to parse QOTD_PORT " + qotdEnvVar);
                     }
                     else
                     {
-                        throw new ArgumentException("Unknown protocol: must be 'tcp' or 'udp'");
+                        Log.Information("Found QOTD_PORT: {int}.", port);
+                        provided = true;
                     }
-
-                    filePath = options.QuotesFilePath;
-                    
-                    // Check if path or just file name
-                    if (!filePath.Contains(Path.DirectorySeparatorChar))
-                    {
-                        // let's assume it's just a file name, so expect it to be in pwd
-                        filePath = "." + Path.DirectorySeparatorChar + filePath;
-                    }
-
-                    // find file
-                    if (!File.Exists(filePath))
-                    {
-                        throw new ArgumentException("Specified file, " + options.QuotesFilePath + " not found.");
-                    }
-                });
+                }
             }
-            catch (Exception ex)
+            else
             {
-                Log.Error(ex.Message);
-                Environment.Exit(1);
+                Log.Information("Using port {int} from args", optionsPort);
+                port = optionsPort;
+                provided = true;
             }
 
-            Log.Information("Protocol: {ProtocolType}", prot);
-            Log.Information("Port: {int}", port);
-            Log.Information("Quotes file : {string}", filePath);
-
-            IQuoteSource qs = new JsonFileQuoteSource(new FileInfo(filePath));
-            IQuoteService quoteService;
-
-            if(ProtocolType.Tcp == prot)
+            if (!provided)
             {
-                quoteService = new TcpQuoteListener();
-                quoteService.Listen(port, qs);
-            } else
-            {
-                quoteService = new UdpQuoteListener();
-                quoteService.Listen(port, qs);
+                Log.Information("Using default port, {int}", DefaultPort);
+                port = DefaultPort;
             }
-            
+            else if (port < IPEndPoint.MinPort || port > IPEndPoint.MaxPort)
+            {
+                throw new ArgumentOutOfRangeException($"Port {port} not in allowable range {IPEndPoint.MinPort}:{IPEndPoint.MaxPort}");
+            }
+
+            _port = port;
         }
     }
 }

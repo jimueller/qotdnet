@@ -1,9 +1,5 @@
 {
   "profiles": {
-    "qotdnet": {
-      "commandName": "Project",
-      "commandLineArgs": "--protocol udp"
-    },
     "qotdnet-linux-udp": {
       "commandName": "Project",
       "commandLineArgs": "--protocol udp --port 55406"
@@ -11,6 +7,20 @@
     "qotdnet-linux-tcp": {
       "commandName": "Project",
       "commandLineArgs": "--protocol tcp --port 55406"
+    },
+    "tcp": {
+      "commandName": "Project"
+    },
+    "udp": {
+      "commandName": "Project",
+      "commandLineArgs": "--protocol udp"
+    },
+    "envars": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "QOTD_PROTO_TYPE": "UDP",
+        "QOTD_PORT": "18"
+      }
     }
   }
 }
